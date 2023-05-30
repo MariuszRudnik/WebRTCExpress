@@ -37,8 +37,7 @@ io.on('connection', (socket)=>{
     socket.on('disconnect', ()=> {
         console.log('user disconnection');
         peers = peers.filter(peer=> peer.socketId !== socket.id)
-        io.sockets.emit(('broadcast', {event: broadcastEventTypes.ACTIVE_USER, activeUsers: peers}))
-
+        io.sockets.emit('broadcast', {event: broadcastEventTypes.ACTIVE_USER, activeUsers: peers})
     })
 
 })
