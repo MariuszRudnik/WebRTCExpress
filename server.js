@@ -1,43 +1,131 @@
 const express = require('express');
 const socket = require('socket.io');
+const groupCallHandler = require('./groupCallHandler')
+const {ExpressPeerServer} = require('peer');
+const { v4: uuidv4 } = require('uuid');
 
+const PORT = 4000;
 
-const POST = 4000;
 const app = express();
-const server = app.listen(POST,()=>{
-    console.log(`server is listening on port ${POST}`)
-    console.log(`http://localhost:${POST}`)
+
+const server = app.listen(PORT, () => {
+    console.log(`server is listening on port ${PORT}`);
+    console.log(`http://localhost:${PORT}`);
 });
+const peerServer = ExpressPeerServer(server,
+    {
+        debug: true,
+    });
+
+app.use('/peerjs', peerServer);
+groupCallHandler.createPeerServerListener(peerServer)
+
 const io = socket(server, {
     cors: {
         origin: '*',
         methods: ['GET', 'POST']
     }
-})
+});
+
 let peers = [];
-const broadcastEventTypes ={
-    ACTIVE_USER: 'ACTIVE_USER',
+let groupCallRooms = [];
+
+const broadcastEventTypes = {
+    ACTIVE_USERS: 'ACTIVE_USERS',
     GROUP_CALL_ROOMS: 'GROUP_CALL_ROOMS'
-}
+};
 
-
-io.on('connection', (socket)=>{
+io.on('connection', (socket) => {
     socket.emit('connection', null);
     console.log('new user connected');
-    console.log(socket.id)
-    socket.on('register-new-user', (data)=>{
+    console.log(socket.id);
+
+    socket.on('register-new-user', (data) => {
         peers.push({
-            userName: data.userName,
+            username: data.username,
             socketId: data.socketId
         });
-        io.sockets.emit('broadcast', {event: broadcastEventTypes.ACTIVE_USER, activeUsers: peers})
-        console.log('register new user');
-        console.log(peers)
-    });
-    socket.on('disconnect', ()=> {
-        console.log('user disconnection');
-        peers = peers.filter(peer=> peer.socketId !== socket.id)
-        io.sockets.emit('broadcast', {event: broadcastEventTypes.ACTIVE_USER, activeUsers: peers})
-    })
+        console.log('registered new user');
+        console.log(peers);
 
-})
+        io.sockets.emit('broadcast', {
+            event: broadcastEventTypes.ACTIVE_USERS,
+            activeUsers: peers
+        });
+
+        io.sockets.emit('broadcast', {
+            event: broadcastEventTypes.GROUP_CALL_ROOMS,
+            groupCallRooms
+        });
+    });
+
+    socket.on('disconnect', () => {
+        console.log('user disconnected');
+        peers = peers.filter(peer => peer.socketId !== socket.id);
+        io.sockets.emit('broadcast', {
+            event: broadcastEventTypes.ACTIVE_USERS,
+            activeUsers: peers
+        });
+    });
+
+    // listeners related with direct call
+
+    socket.on('pre-offer', (data) => {
+        console.log('pre-offer handled');
+        io.to(data.callee.socketId).emit('pre-offer', {
+            callerUsername: data.caller.username,
+            callerSocketId: socket.id
+        });
+    });
+
+    socket.on('pre-offer-answer', (data) => {
+        console.log('handling pre offer answer');
+        io.to(data.callerSocketId).emit('pre-offer-answer', {
+            answer: data.answer
+        });
+    });
+
+    socket.on('webRTC-offer', (data) => {
+        console.log('handling webRTC offer');
+        io.to(data.calleeSocketId).emit('webRTC-offer', {
+            offer: data.offer
+        });
+    });
+
+    socket.on('webRTC-answer', (data) => {
+        console.log('handling webRTC answer');
+        io.to(data.callerSocketId).emit('webRTC-answer', {
+            answer: data.answer
+        });
+    });
+
+    socket.on('webRTC-candidate', (data) => {
+        console.log('handling ice candidate');
+        io.to(data.connectedUserSocketId).emit('webRTC-candidate', {
+            candidate: data.candidate
+        });
+    });
+    socket.on('user-hanged-up', (data) =>{
+        console.log('user-hanged-up')
+        io.to(data.connectedUserSocketId).emit('user-hanged-up')
+    })
+    // event related with group call
+    socket.on('group-call-register', (data)=>{
+        console.log('group-call-register')
+        const roomId = uuidv4();
+        socket.join(roomId);
+        const newGroupCallRoom = {
+            peerId: data.peerId,
+            hostName: data.username,
+            socketId: socket.id,
+            roomId: roomId
+        };
+        groupCallRooms.push(newGroupCallRoom)
+        console.log(groupCallRooms)
+
+        io.sockets.emit('broadcast', {
+            event: broadcastEventTypes.GROUP_CALL_ROOMS,
+            groupCallRooms
+        });
+    })
+});
