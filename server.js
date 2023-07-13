@@ -127,5 +127,12 @@ io.on('connection', (socket) => {
             event: broadcastEventTypes.GROUP_CALL_ROOMS,
             groupCallRooms
         });
+    });
+    socket.on('group-call-joni-request', (data)=>{
+        io.to(data.roomId).emit('group-call-join-request', {
+            peerId: data.peerId,
+            streamId: data.streamId
+        })
+        socket.join(data.roomId);
     })
 });
