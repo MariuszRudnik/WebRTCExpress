@@ -18,5 +18,15 @@
   },
   "devDependencies": {
     "@types/peerjs": "^1.1.0"
-  }
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "scripts": {
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "your-build-command-for-client",
+    "build:server": "your-build-command-for-server",
+    "start": "node server"
+  },
+  "private": true
 }
